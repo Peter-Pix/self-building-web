@@ -77,10 +77,89 @@
             border-radius: 5px;
             display: none;
             z-index: 9999;
+            max-width: 80%;
+            text-align: center;
+        }
+
+        #settingsPanel {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 9999;
+            max-width: 300px;
+        }
+
+        #settingsPanel input, #settingsPanel select {
+            width: 100%;
+            padding: 8px;
+            margin: 8px 0;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            border-radius: 5px;
+        }
+
+        #settingsPanel button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        #settingsPanel button:hover {
+            background: #0056b3;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-connected {
+            background: #28a745;
+        }
+
+        .status-disconnected {
+            background: #dc3545;
         }
     </style>
 </head>
 <body>
+    <div id="settingsPanel">
+        <h3 style="margin-bottom: 15px;">⚙️ AI Settings</h3>
+        <label style="font-size: 12px; opacity: 0.8;">Ollama URL</label>
+        <input type="text" id="ollamaUrl" value="http://172.20.10.10:11434" placeholder="http://localhost:11434">
+        
+        <label style="font-size: 12px; opacity: 0.8;">Model</label>
+        <select id="modelSelect">
+            <option value="llama3:latest">Llama 3</option>
+            <option value="dolphin-llama3:latest">Dolphin Llama 3</option>
+            <option value="deepseek-r1:8b">DeepSeek R1 (8B)</option>
+            <option value="gemma3:1b">Gemma 3 (1B)</option>
+            <option value="qwen3:4b">Qwen 3 (4B)</option>
+        </select>
+        
+        <button id="testConnection">
+            <span class="status-indicator status-disconnected" id="statusIndicator"></span>
+            Test Connection
+        </button>
+        
+        <div style="margin-top: 15px; font-size: 11px; opacity: 0.6;">
+            Type commands to build your website. Say "this is done" when finished.
+        </div>
+    </div>
+
     <div id="canvas"></div>
     <input type="text" id="commandInput" placeholder="Type your command..." autofocus>
     <div id="scoreDisplay">Score: <span id="score">0</span>/100</div>
@@ -92,127 +171,51 @@
         const scoreDisplay = document.getElementById('scoreDisplay');
         const scoreElement = document.getElementById('score');
         const feedback = document.getElementById('feedback');
+        const ollamaUrl = document.getElementById('ollamaUrl');
+        const modelSelect = document.getElementById('modelSelect');
+        const statusIndicator = document.getElementById('statusIndicator');
         
         let commands = [];
         let currentScore = 0;
+        let isConnected = false;
         
-        // Command patterns and their handlers
-        const commandPatterns = [
-            {
-                regex: /(?:create|make|add|set).*background.*?(#[0-9a-fA-F]{3,6}|[a-z]+)/i,
-                handler: (match) => {
-                    const color = match[1];
-                    document.body.style.backgroundColor = color;
-                    return { success: true, points: 8, message: `Background changed to ${color}` };
-                }
-            },
-            {
-                regex: /(?:create|add|make).*(?:hero|section|div|container).*?(?:with|saying|text)?.*?"([^"]+)"/i,
-                handler: (match) => {
-                    const text = match[1];
-                    const section = document.createElement('div');
-                    section.className = 'fade-in';
-                    section.style.cssText = 'padding: 60px 20px; text-align: center; font-size: 48px; font-weight: bold;';
-                    section.textContent = text;
-                    canvas.appendChild(section);
-                    return { success: true, points: 15, message: `Hero section created with text: "${text}"` };
-                }
-            },
-            {
-                regex: /(?:text|font).*?color.*?(#[0-9a-fA-F]{3,6}|[a-z]+)/i,
-                handler: (match) => {
-                    const color = match[1];
-                    document.body.style.color = color;
-                    return { success: true, points: 8, message: `Text color changed to ${color}` };
-                }
-            },
-            {
-                regex: /(?:add|create|make).*?(?:button|btn).*?"([^"]+)"/i,
-                handler: (match) => {
-                    const text = match[1];
-                    const button = document.createElement('button');
-                    button.className = 'fade-in';
-                    button.textContent = text;
-                    button.style.cssText = 'padding: 15px 30px; font-size: 18px; margin: 20px; border: none; border-radius: 5px; background: #007bff; color: white; cursor: pointer;';
-                    button.onmouseover = () => button.style.background = '#0056b3';
-                    button.onmouseout = () => button.style.background = '#007bff';
-                    canvas.appendChild(button);
-                    return { success: true, points: 12, message: `Button created: "${text}"` };
-                }
-            },
-            {
-                regex: /(?:add|create|make).*?(?:heading|title|h[1-6]).*?"([^"]+)"/i,
-                handler: (match) => {
-                    const text = match[1];
-                    const heading = document.createElement('h1');
-                    heading.className = 'fade-in';
-                    heading.style.cssText = 'padding: 20px; text-align: center; font-size: 36px;';
-                    heading.textContent = text;
-                    canvas.appendChild(heading);
-                    return { success: true, points: 10, message: `Heading created: "${text}"` };
-                }
-            },
-            {
-                regex: /(?:add|create|make).*?(?:paragraph|text|p).*?"([^"]+)"/i,
-                handler: (match) => {
-                    const text = match[1];
-                    const p = document.createElement('p');
-                    p.className = 'fade-in';
-                    p.style.cssText = 'padding: 20px; max-width: 800px; margin: 0 auto; line-height: 1.6;';
-                    p.textContent = text;
-                    canvas.appendChild(p);
-                    return { success: true, points: 10, message: `Paragraph added` };
-                }
-            },
-            {
-                regex: /(?:center|align center)/i,
-                handler: () => {
-                    canvas.style.textAlign = 'center';
-                    return { success: true, points: 5, message: `Content centered` };
-                }
-            },
-            {
-                regex: /(?:add|create).*?(?:image|img).*?(https?:\/\/[^\s]+)/i,
-                handler: (match) => {
-                    const url = match[1];
-                    const img = document.createElement('img');
-                    img.className = 'fade-in';
-                    img.src = url;
-                    img.style.cssText = 'max-width: 100%; height: auto; display: block; margin: 20px auto; border-radius: 10px;';
-                    canvas.appendChild(img);
-                    return { success: true, points: 15, message: `Image added` };
-                }
-            },
-            {
-                regex: /(?:padding|add padding|spacing).*?(\d+)/i,
-                handler: (match) => {
-                    const padding = match[1];
-                    canvas.style.padding = `${padding}px`;
-                    return { success: true, points: 7, message: `Padding set to ${padding}px` };
-                }
-            },
-            {
-                regex: /(?:font size|text size).*?(\d+)/i,
-                handler: (match) => {
-                    const size = match[1];
-                    document.body.style.fontSize = `${size}px`;
-                    return { success: true, points: 6, message: `Font size set to ${size}px` };
-                }
-            },
-            {
-                regex: /(?:this is done|finished|complete|i'm done)/i,
-                handler: () => {
-                    finishGame();
-                    return { success: true, points: 0, message: `Evaluating your website...` };
-                }
-            }
-        ];
-        
+        const SYSTEM_PROMPT = `You are a website builder AI. You receive natural language commands and return ONLY valid JavaScript code that modifies the webpage.
+
+Your response must ALWAYS be pure JavaScript code that can be executed with eval(). No explanations, no markdown, no code blocks - just executable JavaScript.
+
+Available variables:
+- canvas: the main div container
+- document.body: the body element
+
+Rules:
+1. Return ONLY executable JavaScript code
+2. Use DOM manipulation (createElement, appendChild, etc.)
+3. Add "fade-in" class to new elements
+4. Set inline styles with element.style.cssText
+5. For colors, fonts, backgrounds, modify document.body.style
+6. Return empty string if command is unclear
+
+Examples:
+
+User: "create a black background"
+Your response: document.body.style.backgroundColor = 'black';
+
+User: "add a hero section saying Hello World"
+Your response: const section = document.createElement('div'); section.className = 'fade-in'; section.style.cssText = 'padding: 60px 20px; text-align: center; font-size: 48px; font-weight: bold;'; section.textContent = 'Hello World'; canvas.appendChild(section);
+
+User: "text color white"
+Your response: document.body.style.color = 'white';
+
+User: "add a blue button that says Click Me"
+Your response: const btn = document.createElement('button'); btn.className = 'fade-in'; btn.textContent = 'Click Me'; btn.style.cssText = 'padding: 15px 30px; font-size: 18px; margin: 20px; border: none; border-radius: 5px; background: blue; color: white; cursor: pointer;'; canvas.appendChild(btn);
+
+Remember: ONLY return executable JavaScript code, nothing else.`;
+
         function showFeedback(message, isError = false) {
             feedback.textContent = message;
             feedback.style.display = 'block';
             feedback.style.background = isError ? 'rgba(220, 53, 69, 0.9)' : 'rgba(40, 167, 69, 0.9)';
-            setTimeout(() => feedback.style.display = 'none', 2000);
+            setTimeout(() => feedback.style.display = 'none', 3000);
         }
         
         function updateScore(points) {
@@ -221,33 +224,117 @@
             scoreDisplay.style.display = 'block';
         }
         
-        function processCommand(command) {
-            command = command.trim().toLowerCase();
+        async function testConnection() {
+            const url = ollamaUrl.value.trim();
+            showFeedback('Testing connection...');
+            
+            try {
+                const response = await fetch(`${url}/api/tags`, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    isConnected = true;
+                    statusIndicator.className = 'status-indicator status-connected';
+                    showFeedback('✅ Connected to Ollama!');
+                    input.disabled = false;
+                } else {
+                    throw new Error('Connection failed');
+                }
+            } catch (error) {
+                isConnected = false;
+                statusIndicator.className = 'status-indicator status-disconnected';
+                showFeedback('❌ Cannot connect to Ollama. Check URL and server.', true);
+                input.disabled = true;
+            }
+        }
+        
+        async function sendToOllama(userCommand) {
+            const url = ollamaUrl.value.trim();
+            const model = modelSelect.value;
+            
+            try {
+                const response = await fetch(`${url}/api/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: model,
+                        prompt: userCommand,
+                        system: SYSTEM_PROMPT,
+                        stream: false,
+                        options: {
+                            temperature: 0.3
+                        }
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                return data.response.trim();
+            } catch (error) {
+                throw new Error(`Ollama error: ${error.message}`);
+            }
+        }
+        
+        async function processCommand(command) {
+            command = command.trim();
             
             if (!command) return;
             
-            for (let pattern of commandPatterns) {
-                const match = command.match(pattern.regex);
-                if (match) {
-                    const result = pattern.handler(match);
-                    if (result.success) {
-                        commands.push(command);
-                        if (result.points > 0) {
-                            updateScore(result.points);
-                        }
-                        showFeedback(result.message);
-                        return;
-                    }
-                }
+            // Check for finish command
+            if (/this is done|finished|complete|i'm done/i.test(command)) {
+                finishGame();
+                return;
             }
             
-            showFeedback('Command not recognized. Try: "create a black background" or "add a hero section with text Hello"', true);
+            if (!isConnected) {
+                showFeedback('❌ Not connected to Ollama. Click "Test Connection" first.', true);
+                return;
+            }
+            
+            showFeedback('🤖 AI is thinking...');
+            input.disabled = true;
+            
+            try {
+                const jsCode = await sendToOllama(command);
+                
+                // Clean up the response (remove code blocks if AI added them)
+                let cleanCode = jsCode.replace(/```javascript\n?/g, '').replace(/```\n?/g, '').trim();
+                
+                if (!cleanCode) {
+                    showFeedback('⚠️ AI returned empty response. Try rephrasing.', true);
+                    input.disabled = false;
+                    return;
+                }
+                
+                // Execute the code
+                try {
+                    eval(cleanCode);
+                    commands.push(command);
+                    updateScore(10);
+                    showFeedback('✅ Command executed!');
+                } catch (execError) {
+                    console.error('Execution error:', execError);
+                    console.log('Code received:', cleanCode);
+                    showFeedback('⚠️ Code execution failed. AI response may be invalid.', true);
+                }
+                
+            } catch (error) {
+                console.error('Error:', error);
+                showFeedback(`❌ ${error.message}`, true);
+            } finally {
+                input.disabled = false;
+            }
         }
         
         function calculateFinalScore() {
             let score = currentScore;
             
-            // Bonus points for variety
+            // Bonus for variety
             const uniqueTypes = new Set();
             if (document.body.style.backgroundColor) uniqueTypes.add('background');
             if (canvas.querySelector('div')) uniqueTypes.add('section');
@@ -258,7 +345,6 @@
             const varietyBonus = uniqueTypes.size * 5;
             score += varietyBonus;
             
-            // Cap at 100
             return Math.min(100, score);
         }
         
@@ -290,13 +376,13 @@
             
             if (finalScore >= 80) {
                 rating = '🌟 Outstanding!';
-                comment = 'You\'ve built an impressive website! Great use of commands and creativity.';
+                comment = 'You\'ve built an impressive website with AI!';
             } else if (finalScore >= 60) {
                 rating = '👍 Great Job!';
-                comment = 'Nice work! Your website has good structure and style.';
+                comment = 'Nice work! Your website has good structure.';
             } else if (finalScore >= 40) {
                 rating = '✓ Good Start!';
-                comment = 'You\'re on the right track. Try adding more variety to your page.';
+                comment = 'You\'re on the right track. Try more commands!';
             } else {
                 rating = '💪 Keep Trying!';
                 comment = 'Experiment with more commands to build a richer page.';
@@ -314,6 +400,9 @@
             document.body.appendChild(overlay);
         }
         
+        // Event Listeners
+        document.getElementById('testConnection').addEventListener('click', testConnection);
+        
         input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 processCommand(input.value);
@@ -321,12 +410,9 @@
             }
         });
         
-        // Tutorial hint
-        setTimeout(() => {
-            if (commands.length === 0) {
-                showFeedback('Try: "create a black background"');
-            }
-        }, 3000);
+        // Initial connection test
+        input.disabled = true;
+        setTimeout(testConnection, 500);
     </script>
 </body>
 </html>
