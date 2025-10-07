@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Self-Building Website</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            transition: background-color 0.5s ease, color 0.5s ease;
+        }
+        
+        #commandInput {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: none;
+            outline: none;
+            background: transparent;
+            font-size: 18px;
+            text-align: center;
+            width: 80%;
+            max-width: 600px;
+            padding: 10px;
+            color: inherit;
+            z-index: 10000;
+        }
+        
+        #commandInput::placeholder {
+            color: rgba(128, 128, 128, 0.5);
+        }
+        
+        #canvas {
+            width: 100%;
+            min-height: 100vh;
+            position: relative;
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        #scoreDisplay {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            display: none;
+            z-index: 9999;
+        }
+        
+        #feedback {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: none;
+            z-index: 9999;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas"></div>
+    <input type="text" id="commandInput" placeholder="Type your command..." autofocus>
+    <div id="scoreDisplay">Score: <span id="score">0</span>/100</div>
+    <div id="feedback"></div>
+
+    <script>
+        const input = document.getElementById('commandInput');
+        const canvas = document.getElementById('canvas');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const scoreElement = document.getElementById('score');
+        const feedback = document.getElementById('feedback');
+        
+        let commands = [];
+        let currentScore = 0;
+        
+        // Command patterns and their handlers
+        const commandPatterns = [
+            {
+                regex: /(?:create|make|add|set).*background.*?(#[0-9a-fA-F]{3,6}|[a-z]+)/i,
+                handler: (match) => {
+                    const color = match[1];
+                    document.body.style.backgroundColor = color;
+                    return { success: true, points: 8, message: `Background changed to ${color}` };
+                }
+            },
+            {
+                regex: /(?:create|add|make).*(?:hero|section|div|container).*?(?:with|saying|text)?.*?"([^"]+)"/i,
+                handler: (match) => {
+                    const text = match[1];
+                    const section = document.createElement('div');
+                    section.className = 'fade-in';
+                    section.style.cssText = 'padding: 60px 20px; text-align: center; font-size: 48px; font-weight: bold;';
+                    section.textContent = text;
+                    canvas.appendChild(section);
+                    return { success: true, points: 15, message: `Hero section created with text: "${text}"` };
+                }
+            },
+            {
+                regex: /(?:text|font).*?color.*?(#[0-9a-fA-F]{3,6}|[a-z]+)/i,
+                handler: (match) => {
+                    const color = match[1];
+                    document.body.style.color = color;
+                    return { success: true, points: 8, message: `Text color changed to ${color}` };
+                }
+            },
+            {
+                regex: /(?:add|create|make).*?(?:button|btn).*?"([^"]+)"/i,
+                handler: (match) => {
+                    const text = match[1];
+                    const button = document.createElement('button');
+                    button.className = 'fade-in';
+                    button.textContent = text;
+                    button.style.cssText = 'padding: 15px 30px; font-size: 18px; margin: 20px; border: none; border-radius: 5px; background: #007bff; color: white; cursor: pointer;';
+                    button.onmouseover = () => button.style.background = '#0056b3';
+                    button.onmouseout = () => button.style.background = '#007bff';
+                    canvas.appendChild(button);
+                    return { success: true, points: 12, message: `Button created: "${text}"` };
+                }
+            },
+            {
+                regex: /(?:add|create|make).*?(?:heading|title|h[1-6]).*?"([^"]+)"/i,
+                handler: (match) => {
+                    const text = match[1];
+                    const heading = document.createElement('h1');
+                    heading.className = 'fade-in';
+                    heading.style.cssText = 'padding: 20px; text-align: center; font-size: 36px;';
+                    heading.textContent = text;
+                    canvas.appendChild(heading);
+                    return { success: true, points: 10, message: `Heading created: "${text}"` };
+                }
+            },
+            {
+                regex: /(?:add|create|make).*?(?:paragraph|text|p).*?"([^"]+)"/i,
+                handler: (match) => {
+                    const text = match[1];
+                    const p = document.createElement('p');
+                    p.className = 'fade-in';
+                    p.style.cssText = 'padding: 20px; max-width: 800px; margin: 0 auto; line-height: 1.6;';
+                    p.textContent = text;
+                    canvas.appendChild(p);
+                    return { success: true, points: 10, message: `Paragraph added` };
+                }
+            },
+            {
+                regex: /(?:center|align center)/i,
+                handler: () => {
+                    canvas.style.textAlign = 'center';
+                    return { success: true, points: 5, message: `Content centered` };
+                }
+            },
+            {
+                regex: /(?:add|create).*?(?:image|img).*?(https?:\/\/[^\s]+)/i,
+                handler: (match) => {
+                    const url = match[1];
+                    const img = document.createElement('img');
+                    img.className = 'fade-in';
+                    img.src = url;
+                    img.style.cssText = 'max-width: 100%; height: auto; display: block; margin: 20px auto; border-radius: 10px;';
+                    canvas.appendChild(img);
+                    return { success: true, points: 15, message: `Image added` };
+                }
+            },
+            {
+                regex: /(?:padding|add padding|spacing).*?(\d+)/i,
+                handler: (match) => {
+                    const padding = match[1];
+                    canvas.style.padding = `${padding}px`;
+                    return { success: true, points: 7, message: `Padding set to ${padding}px` };
+                }
+            },
+            {
+                regex: /(?:font size|text size).*?(\d+)/i,
+                handler: (match) => {
+                    const size = match[1];
+                    document.body.style.fontSize = `${size}px`;
+                    return { success: true, points: 6, message: `Font size set to ${size}px` };
+                }
+            },
+            {
+                regex: /(?:this is done|finished|complete|i'm done)/i,
+                handler: () => {
+                    finishGame();
+                    return { success: true, points: 0, message: `Evaluating your website...` };
+                }
+            }
+        ];
+        
+        function showFeedback(message, isError = false) {
+            feedback.textContent = message;
+            feedback.style.display = 'block';
+            feedback.style.background = isError ? 'rgba(220, 53, 69, 0.9)' : 'rgba(40, 167, 69, 0.9)';
+            setTimeout(() => feedback.style.display = 'none', 2000);
+        }
+        
+        function updateScore(points) {
+            currentScore = Math.min(100, currentScore + points);
+            scoreElement.textContent = currentScore;
+            scoreDisplay.style.display = 'block';
+        }
+        
+        function processCommand(command) {
+            command = command.trim().toLowerCase();
+            
+            if (!command) return;
+            
+            for (let pattern of commandPatterns) {
+                const match = command.match(pattern.regex);
+                if (match) {
+                    const result = pattern.handler(match);
+                    if (result.success) {
+                        commands.push(command);
+                        if (result.points > 0) {
+                            updateScore(result.points);
+                        }
+                        showFeedback(result.message);
+                        return;
+                    }
+                }
+            }
+            
+            showFeedback('Command not recognized. Try: "create a black background" or "add a hero section with text Hello"', true);
+        }
+        
+        function calculateFinalScore() {
+            let score = currentScore;
+            
+            // Bonus points for variety
+            const uniqueTypes = new Set();
+            if (document.body.style.backgroundColor) uniqueTypes.add('background');
+            if (canvas.querySelector('div')) uniqueTypes.add('section');
+            if (canvas.querySelector('button')) uniqueTypes.add('button');
+            if (canvas.querySelector('h1, h2, h3')) uniqueTypes.add('heading');
+            if (canvas.querySelector('p')) uniqueTypes.add('paragraph');
+            
+            const varietyBonus = uniqueTypes.size * 5;
+            score += varietyBonus;
+            
+            // Cap at 100
+            return Math.min(100, score);
+        }
+        
+        function finishGame() {
+            input.style.display = 'none';
+            
+            const finalScore = calculateFinalScore();
+            scoreElement.textContent = finalScore;
+            
+            const overlay = document.createElement('div');
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.95);
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                color: white;
+                z-index: 10001;
+                animation: fadeIn 0.5s ease-in;
+            `;
+            
+            let rating = '';
+            let comment = '';
+            
+            if (finalScore >= 80) {
+                rating = '🌟 Outstanding!';
+                comment = 'You\'ve built an impressive website! Great use of commands and creativity.';
+            } else if (finalScore >= 60) {
+                rating = '👍 Great Job!';
+                comment = 'Nice work! Your website has good structure and style.';
+            } else if (finalScore >= 40) {
+                rating = '✓ Good Start!';
+                comment = 'You\'re on the right track. Try adding more variety to your page.';
+            } else {
+                rating = '💪 Keep Trying!';
+                comment = 'Experiment with more commands to build a richer page.';
+            }
+            
+            overlay.innerHTML = `
+                <h1 style="font-size: 72px; margin-bottom: 20px;">${finalScore}/100</h1>
+                <h2 style="font-size: 36px; margin-bottom: 20px;">${rating}</h2>
+                <p style="font-size: 20px; text-align: center; max-width: 600px; margin-bottom: 30px;">${comment}</p>
+                <button onclick="location.reload()" style="padding: 15px 40px; font-size: 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                    Play Again
+                </button>
+            `;
+            
+            document.body.appendChild(overlay);
+        }
+        
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                processCommand(input.value);
+                input.value = '';
+            }
+        });
+        
+        // Tutorial hint
+        setTimeout(() => {
+            if (commands.length === 0) {
+                showFeedback('Try: "create a black background"');
+            }
+        }, 3000);
+    </script>
+</body>
+</html>
